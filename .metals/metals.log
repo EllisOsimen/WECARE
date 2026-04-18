@@ -273,3 +273,32 @@ java.nio.file.FileSystemNotFoundException: Provider "chat-editing-snapshot-text-
 2026.04.18 15:11:02 WARN  no build target for: C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\flink\EldercareAlertPipeline.java
 2026.04.18 15:11:02 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\flink\EldercareAlertPipeline.java. Using fallback presentation compiler.
 2026.04.18 15:11:03 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\flink\EldercareAlertPipeline.java. Using fallback presentation compiler.
+2026.04.18 15:12:37 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\flink\EldercareAlertPipeline.java. Using fallback presentation compiler.
+2026.04.18 15:14:35 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\flink\EldercareAlertPipeline.java. Using fallback presentation compiler.
+2026.04.18 15:14:35 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\flink\EldercareAlertPipeline.java. Using fallback presentation compiler.
+2026.04.18 15:15:50 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\WeCareApplication.java. Using fallback presentation compiler.
+2026.04.18 15:15:50 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\WeCareApplication.java. Using fallback presentation compiler.
+2026.04.18 15:15:50 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\WeCareApplication.java. Using fallback presentation compiler.
+2026.04.18 15:15:50 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\WeCareApplication.java. Using fallback presentation compiler.
+2026.04.18 15:15:55 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\WeCareApplication.java. Using fallback presentation compiler.
+2026.04.18 15:15:55 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\config\KafkaConfig.java. Using fallback presentation compiler.
+2026.04.18 15:15:55 WARN  no build target for: C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\config\KafkaConfig.java
+2026.04.18 15:15:55 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\config\KafkaConfig.java. Using fallback presentation compiler.
+2026.04.18 15:15:55 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\config\KafkaConfig.java. Using fallback presentation compiler.
+2026.04.18 15:15:55 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\config\KafkaConfig.java. Using fallback presentation compiler.
+2026.04.18 15:15:55 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\config\KafkaConfig.java. Using fallback presentation compiler.
+2026.04.18 15:16:01 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\flink\EldercareAlertPipeline.java. Using fallback presentation compiler.
+2026.04.18 15:16:01 WARN  no build target for: C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\flink\EldercareAlertPipeline.java
+2026.04.18 15:16:01 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\flink\EldercareAlertPipeline.java. Using fallback presentation compiler.
+2026.04.18 15:16:01 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\flink\EldercareAlertPipeline.java. Using fallback presentation compiler.
+2026.04.18 15:16:01 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\flink\EldercareAlertPipeline.java. Using fallback presentation compiler.
+2026.04.18 15:16:01 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\flink\EldercareAlertPipeline.java. Using fallback presentation compiler.
+2026.04.18 15:28:02 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\controller\WeCareController.java. Using fallback presentation compiler.
+2026.04.18 15:28:02 WARN  no build target for: C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\controller\WeCareController.java
+2026.04.18 15:28:04 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\model\PatientStatusView.java. Using fallback presentation compiler.
+2026.04.18 15:28:04 WARN  no build target for: C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\model\PatientStatusView.java
+2026.04.18 15:28:16 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\service\PatientStatusService.java. Using fallback presentation compiler.
+2026.04.18 15:28:16 WARN  no build target for: C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\service\PatientStatusService.java
+2026.04.18 15:28:22 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\controller\PatientStatusController.java. Using fallback presentation compiler.
+2026.04.18 15:28:22 WARN  no build target for: C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\controller\PatientStatusController.java
+2026.04.18 15:30:45 INFO  no build target found for C:\Users\ellis\OneDrive\Documents\ACP\WeCare\WeCare\src\main\java\uk\ac\ed\inf\wecare\config\RedisConfig.java. Using fallback presentation compiler.

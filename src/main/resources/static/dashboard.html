@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WeCare Nurse Dashboard</title>
+    <style>
+        :root {
+            --bg: #f4f6fb;
+            --panel: #ffffff;
+            --ink: #10243d;
+            --muted: #5f6e82;
+            --urgent: #b70f0a;
+            --warning: #9b6c00;
+            --ok: #117a4f;
+            --line: #dde4ee;
+            --accent: #005f73;
+            --accent-soft: #e3f4f7;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background:
+                radial-gradient(circle at 20% 10%, #d8edf2 0, transparent 40%),
+                radial-gradient(circle at 80% 0%, #f5e7cf 0, transparent 35%),
+                var(--bg);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+
+        .layout {
+            width: min(1100px, 94vw);
+            margin: 1.5rem auto 2rem;
+        }
+
+        .hero {
+            display: grid;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        h1 {
+            margin: 0;
+            letter-spacing: 0.4px;
+        }
+
+        .subtitle {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.95rem;
+        }
+
+        .toolbar {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 0.8rem;
+            display: grid;
+            gap: 0.7rem;
+            grid-template-columns: 1fr;
+            margin-bottom: 1rem;
+        }
+
+        @media (min-width: 850px) {
+            .toolbar {
+                grid-template-columns: 1.2fr 1fr 1fr;
+                align-items: center;
+            }
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            flex-wrap: wrap;
+            font-size: 0.9rem;
+        }
+
+        .pill {
+            border-radius: 999px;
+            padding: 0.25rem 0.6rem;
+            background: var(--accent-soft);
+            color: var(--accent);
+            border: 1px solid #b7dce2;
+            font-weight: 600;
+        }
+
+        .controls {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        button {
+            border: 1px solid #bfd4dd;
+            background: #ffffff;
+            color: var(--ink);
+            border-radius: 10px;
+            padding: 0.45rem 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #f0f8fa;
+        }
+
+        .pin-form {
+            display: flex;
+            gap: 0.4rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .pin-form input {
+            width: 110px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 0.4rem 0.55rem;
+            font-size: 0.92rem;
+        }
+
+        .grid {
+            display: grid;
+            gap: 0.8rem;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 0.85rem;
+            box-shadow: 0 2px 7px rgba(16, 36, 61, 0.04);
+            display: grid;
+            gap: 0.55rem;
+        }
+
+        .card.pinned {
+            border-color: #f2bf58;
+            box-shadow: 0 0 0 2px rgba(242, 191, 88, 0.28);
+        }
+
+        .card-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .patient-label {
+            margin: 0;
+            font-size: 1.05rem;
+        }
+
+        .tag {
+            font-size: 0.78rem;
+            font-weight: 700;
+            padding: 0.2rem 0.45rem;
+            border-radius: 999px;
+            border: 1px solid;
+        }
+
+        .tag.critical {
+            color: var(--urgent);
+            border-color: #efb8b4;
+            background: #fdecea;
+        }
+
+        .tag.warning {
+            color: var(--warning);
+            border-color: #ead3a0;
+            background: #fff5df;
+        }
+
+        .tag.neutral {
+            color: #3e526f;
+            border-color: #ccd7e8;
+            background: #edf3fd;
+        }
+
+        .details {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.35;
+            font-size: 0.9rem;
+            word-break: break-word;
+        }
+
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .pin-btn {
+            border-color: #f2bf58;
+            background: #fff8e6;
+        }
+
+        .unpin-btn {
+            border-color: #ffd6a5;
+            background: #fff2e8;
+        }
+
+        .empty {
+            border: 1px dashed #b6c1d2;
+            border-radius: 12px;
+            padding: 1.2rem;
+            background: #ffffffde;
+            color: var(--muted);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <header class="hero">
+        <h1>WeCare Patient Status Board</h1>
+        <p class="subtitle">Live Redis-backed view of patient alerts with pinning support.</p>
+    </header>
+
+    <section class="toolbar">
+        <div class="status-row">
+            <span class="pill" id="last-refresh">Last refresh: pending...</span>
+            <span class="pill" id="counts">Patients: 0 | Pinned: 0</span>
+        </div>
+        <div class="controls">
+            <button id="refresh-btn" type="button">Refresh now</button>
+            <button id="toggle-auto-btn" type="button">Pause auto refresh</button>
+        </div>
+        <form class="pin-form" id="pin-form">
+            <label for="patient-id-input">Pin patient ID</label>
+            <input id="patient-id-input" type="number" min="1" required />
+            <button type="submit">Pin</button>
+        </form>
+    </section>
+
+    <section id="cards" class="grid"></section>
+    <section id="empty" class="empty" style="display:none;">No patient statuses in Redis yet. Trigger an alert from simulator/Flink, or pin a patient ID manually.</section>
+</div>
+
+<script>
+    const cards = document.getElementById("cards");
+    const empty = document.getElementById("empty");
+    const refreshBtn = document.getElementById("refresh-btn");
+    const toggleAutoBtn = document.getElementById("toggle-auto-btn");
+    const lastRefresh = document.getElementById("last-refresh");
+    const counts = document.getElementById("counts");
+    const pinForm = document.getElementById("pin-form");
+    const patientIdInput = document.getElementById("patient-id-input");
+
+    let autoRefresh = true;
+    let timer = null;
+
+    function badgeClass(status) {
+        const upper = (status || "").toUpperCase();
+        if (upper.includes("CRITICAL") || upper.includes("URGENT")) {
+            return "critical";
+        }
+        if (upper.includes("WARNING")) {
+            return "warning";
+        }
+        return "neutral";
+    }
+
+    function escapeHtml(text) {
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    async function pin(patientId) {
+        await fetch(`/api/patients/${patientId}/pin`, { method: "POST" });
+    }
+
+    async function unpin(patientId) {
+        await fetch(`/api/patients/${patientId}/pin`, { method: "DELETE" });
+    }
+
+    async function loadStatuses() {
+        const response = await fetch("/api/patients/status", { cache: "no-store" });
+        if (!response.ok) {
+            throw new Error(`Request failed: ${response.status}`);
+        }
+
+        const patients = await response.json();
+        render(patients);
+    }
+
+    function render(patients) {
+        cards.innerHTML = "";
+
+        if (!Array.isArray(patients) || patients.length === 0) {
+            empty.style.display = "block";
+            counts.textContent = "Patients: 0 | Pinned: 0";
+            return;
+        }
+
+        empty.style.display = "none";
+        const pinnedCount = patients.filter(p => p.pinned).length;
+        counts.textContent = `Patients: ${patients.length} | Pinned: ${pinnedCount}`;
+
+        for (const patient of patients) {
+            const card = document.createElement("article");
+            card.className = `card ${patient.pinned ? "pinned" : ""}`;
+
+            const safeStatus = escapeHtml(patient.status);
+            const safeRule = escapeHtml(patient.lastRule);
+            const safeMsg = escapeHtml(patient.lastMessage);
+            const safeLoc = escapeHtml(patient.locationZone);
+            const safeUpdated = escapeHtml(patient.updatedAt);
+
+            card.innerHTML = `
+                <div class="card-head">
+                    <h3 class="patient-label">Patient ${patient.patientId}</h3>
+                    <span class="tag ${badgeClass(patient.status)}">${safeStatus}</span>
+                </div>
+                <p class="details"><strong>Rule:</strong> ${safeRule}</p>
+                <p class="details"><strong>Location:</strong> ${safeLoc}</p>
+                <p class="details"><strong>Updated:</strong> ${safeUpdated}</p>
+                <p class="details"><strong>Message:</strong> ${safeMsg}</p>
+                <div class="actions">
+                    <button class="${patient.pinned ? "unpin-btn" : "pin-btn"}" data-id="${patient.patientId}" data-pinned="${patient.pinned}">
+                        ${patient.pinned ? "Unpin" : "Pin"}
+                    </button>
+                </div>
+            `;
+
+            cards.appendChild(card);
+        }
+    }
+
+    async function refreshSafely() {
+        try {
+            await loadStatuses();
+            lastRefresh.textContent = `Last refresh: ${new Date().toLocaleTimeString()}`;
+        } catch (error) {
+            lastRefresh.textContent = `Refresh error: ${error.message}`;
+        }
+    }
+
+    cards.addEventListener("click", async (event) => {
+        const button = event.target.closest("button[data-id]");
+        if (!button) {
+            return;
+        }
+
+        const patientId = Number(button.getAttribute("data-id"));
+        const pinned = button.getAttribute("data-pinned") === "true";
+
+        if (Number.isNaN(patientId)) {
+            return;
+        }
+
+        if (pinned) {
+            await unpin(patientId);
+        } else {
+            await pin(patientId);
+        }
+
+        await refreshSafely();
+    });
+
+    pinForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const patientId = Number(patientIdInput.value);
+        if (Number.isNaN(patientId) || patientId < 1) {
+            return;
+        }
+
+        await pin(patientId);
+        patientIdInput.value = "";
+        await refreshSafely();
+    });
+
+    refreshBtn.addEventListener("click", refreshSafely);
+
+    toggleAutoBtn.addEventListener("click", () => {
+        autoRefresh = !autoRefresh;
+        toggleAutoBtn.textContent = autoRefresh ? "Pause auto refresh" : "Resume auto refresh";
+    });
+
+    timer = setInterval(() => {
+        if (autoRefresh) {
+            refreshSafely();
+        }
+    }, 3000);
+
+    refreshSafely();
+</script>
+</body>
+</html>
