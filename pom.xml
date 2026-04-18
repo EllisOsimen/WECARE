@@ -9,7 +9,7 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>uk.ac.ed.inf</groupId>
-    <artifactId>acp</artifactId>
+    <artifactId>wecare</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>Rest_Service</name>
     <description>Rest_Service</description>
