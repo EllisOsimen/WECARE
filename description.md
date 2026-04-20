@@ -4,7 +4,7 @@
 
 This repository implements a real-time eldercare telemetry proof-of-concept (PoC).
 
-It simulates patient vital-sign and movement data, streams telemetry events through Kafka, evaluates safety/anomaly rules in Apache Flink, routes alerts to nurse-facing RabbitMQ queues, optionally stores latest patient alert state in Redis, and exposes a web dashboard through Spring Boot so clinicians can monitor active and pinned patients.
+It simulates patient vital-sign and movement data, streams telemetry events through Kafka, evaluates safety/anomaly rules in Apache Flink, routes alerts to nurse-facing RabbitMQ queues, archives all alerts into DynamoDB as an append-only history, stores latest patient alert state in Redis, and exposes a web dashboard through Spring Boot so clinicians can monitor active and pinned patients.
 
 In short: this is an event-driven monitoring pipeline for eldercare, with a browser-facing operational dashboard.
 
@@ -15,10 +15,11 @@ Runtime data path:
 1. Telemetry simulation: `scripts/patient_telemetry_simulator.py`
 2. Event bus: Kafka topic `elder-vitals-inbound`
 3. Stream processing and rules: `src/main/java/uk/ac/ed/inf/wecare/flink/EldercareAlertPipeline.java`
-4. Alert routing bus: RabbitMQ queues `nurse-urgent-alerts` and `nurse-warnings`
-5. Nurse consumers: `scripts/nurse_station_consumer.py` and `scripts/nurse_warning_consumer.py`
-6. Optional cache update: Redis keys `patient_<id>_status` and set `pinned_patients`
-7. API + UI: Spring Boot controllers + `src/main/resources/static/dashboard.html`
+4. Alert routing bus: RabbitMQ queues `nurse-urgent-alerts`, `nurse-warnings`, and `alert-archive`
+5. Queue-to-history persistence: Spring Rabbit listener -> DynamoDB table `wecare-alert-history`
+6. Nurse consumers: `scripts/nurse_station_consumer.py` and `scripts/nurse_warning_consumer.py`
+7. Cache update: Redis keys `patient_<id>_status` and set `pinned_patients`
+8. API + UI: Spring Boot controllers + `src/main/resources/static/dashboard.html`
 
 Support infrastructure is defined in `docker-compose.yml`: Kafka, RabbitMQ, Redis, Postgres, LocalStack.
 
@@ -42,6 +43,7 @@ Main runtime APIs:
   - `GET /api/patients/status`
   - `POST /api/patients/{patientId}/pin`
   - `DELETE /api/patients/{patientId}/pin`
+  - Rabbit listener consumes archive queue and writes every alert into DynamoDB history table.
 
 Business logic:
 - `src/main/java/uk/ac/ed/inf/wecare/service/PatientStatusService.java`
@@ -121,7 +123,23 @@ Detailed operation (`nurse_station_consumer.py`):
 
 `nurse_warning_consumer.py` is a convenience launcher that reuses the same consumer logic but starts it in warning mode on queue `nurse-warnings`.
 
-### 3.5 Browser dashboard service
+### 3.5 Alert history archival service (Spring + DynamoDB)
+
+Files:
+- `src/main/java/uk/ac/ed/inf/wecare/service/AlertArchiveQueueListener.java`
+- `src/main/java/uk/ac/ed/inf/wecare/service/AlertHistoryArchiveService.java`
+
+Role:
+- Consumes all alert events from RabbitMQ archive queue `alert-archive`.
+- Persists each alert as an immutable historical row in DynamoDB.
+
+Detailed operation:
+- `AlertArchiveQueueListener` uses `@RabbitListener` on queue `alert-archive`.
+- `AlertHistoryArchiveService` ensures table `wecare-alert-history` exists at startup.
+- Writes one DynamoDB item per alert with key `alert_id` and metadata fields such as rule, severity, patient ID, timestamps, source queue, and raw payload.
+- Uses idempotent put (`attribute_not_exists(alert_id)`) to avoid duplicate inserts on retry.
+
+### 3.6 Browser dashboard service
 
 File:
 - `src/main/resources/static/dashboard.html`
@@ -177,6 +195,7 @@ Protocol/data:
 Configured queues:
 - `nurse-urgent-alerts`
 - `nurse-warnings`
+- `alert-archive`
 - `assignment_queue` (declared for future use)
 
 ### 4.3 Redis (patient status cache + pinned set)
@@ -207,11 +226,26 @@ Protocol/data:
 - HTTP on `localhost:8080`
 - JSON request/response for patient status and pin operations
 
-### 4.5 Optional integrations present but disabled by default
+### 4.5 DynamoDB (persistent append-only alert log)
+
+Used between:
+- RabbitMQ archive queue -> Spring archive listener -> DynamoDB
+
+Software/libraries:
+- Local AWS emulation: LocalStack (`localhost:4566`)
+- Java client: AWS SDK v2 `DynamoDbClient`
+- Spring integration: Rabbit listener + conditional DynamoDB service
+
+Protocol/data:
+- Queue intake over AMQP from `alert-archive`
+- DynamoDB API writes to table `wecare-alert-history`
+- Append-only item schema stores alert metadata and `raw_payload`
+
+### 4.6 Optional integrations present but disabled by default
 
 Configured in `src/main/resources/application.properties`:
 - `wecare.integrations.postgres.enabled=false`
-- `wecare.integrations.dynamodb.enabled=false`
+- `wecare.integrations.dynamodb.enabled=true`
 - `wecare.integrations.s3.enabled=false`
 
 Available configuration classes:
@@ -219,7 +253,7 @@ Available configuration classes:
 - `src/main/java/uk/ac/ed/inf/wecare/config/DynamoDBConfig.java` (AWS SDK DynamoDbClient)
 - `src/main/java/uk/ac/ed/inf/wecare/config/S3Config.java` (AWS SDK S3Client)
 
-These beans are conditional and only activate when explicitly enabled.
+Postgres and S3 remain conditional/disabled by default. DynamoDB is now enabled to support persistent alert history.
 
 ## 5. Infrastructure and ports
 
@@ -240,8 +274,9 @@ Typical run:
 3. Start Flink pipeline process.
 4. Start telemetry simulator (publishes events to Kafka).
 5. Flink consumes telemetry and emits rule-based alerts to Rabbit queues.
-6. Nurse consumers read queue messages and optionally write latest status into Redis.
-7. Dashboard fetches status API and shows live alert/pinned patient cards.
+6. Flink duplicates each alert into `alert-archive`; Spring listener writes it to DynamoDB history.
+7. Nurse consumers read urgent/warning queue messages and write latest status into Redis.
+8. Dashboard fetches status API and shows live alert/pinned patient cards.
 
 Result:
 - Real-time anomaly visibility for eldercare patients, with a separation of urgent vs warning alert channels, and a dashboard backed by Redis state.
@@ -265,12 +300,13 @@ Infrastructure/runtime services:
 - Kafka
 - RabbitMQ
 - Redis
+- DynamoDB (LocalStack-backed in local environment)
 - Spring Boot app
 - Flink job
-- Optional: Postgres, LocalStack
+- Optional: Postgres, S3
 
 ## 8. Notes and implementation caveats
 
 - The active monitoring dashboard depends on consumer-side Redis updates (`--redis-enabled`) to reflect latest alert states.
-- Postgres, DynamoDB, and S3 are configured for extensibility but are not part of the default active telemetry path.
-- The quick-start docs mention `scripts/requirements.txt`, while dependency file present in repository root is `requirements.txt`.
+- Postgres and S3 remain configured for extensibility but are not part of the default active telemetry path.
+- The DynamoDB archival path depends on LocalStack being available at `http://localhost:4566` in local runs.

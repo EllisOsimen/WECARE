@@ -5,7 +5,7 @@
 ### 1) Start infrastructure
 
 ```powershell
-docker compose up -d kafka rabbitmq
+docker compose up -d kafka rabbitmq redis localstack
 ```
 
 ### 2) Start the Spring Boot app (pre-creates topic and queues)
@@ -13,7 +13,12 @@ docker compose up -d kafka rabbitmq
 On startup, this app now declares:
 
 - Kafka topic: `elder-vitals-inbound`
-- RabbitMQ queues: `nurse-urgent-alerts`, `nurse-warnings`
+- RabbitMQ queues: `nurse-urgent-alerts`, `nurse-warnings`, `alert-archive`
+
+And initializes DynamoDB alert history persistence (LocalStack-backed):
+
+- Table: `wecare-alert-history`
+- Consumer queue: `alert-archive`
 
 Run:
 
@@ -26,7 +31,7 @@ Run:
 In a second terminal:
 
 ```powershell
-pip install -r scripts/requirements.txt
+pip install -r requirements.txt
 python scripts/patient_telemetry_simulator.py --topic elder-vitals-inbound --interval-seconds 1
 ```
 
@@ -46,7 +51,7 @@ Type `exit` to stop the simulator.
 Run the Flink job main class from Maven:
 
 ```powershell
-./mvnw -DskipTests spring-boot:run "-Dspring-boot.run.main-class=uk.ac.ed.inf.wecare.flink.EldercareAlertPipeline" "-Dspring-boot.run.arguments=--kafka-bootstrap localhost:9092 --kafka-topic elder-vitals-inbound --rabbit-host localhost --rabbit-port 5672 --urgent-queue nurse-urgent-alerts --warning-queue nurse-warnings"
+./mvnw -DskipTests spring-boot:run "-Dspring-boot.run.main-class=uk.ac.ed.inf.wecare.flink.EldercareAlertPipeline" "-Dspring-boot.run.arguments=--kafka-bootstrap localhost:9092 --kafka-topic elder-vitals-inbound --rabbit-host localhost --rabbit-port 5672 --urgent-queue nurse-urgent-alerts --warning-queue nurse-warnings --archive-queue alert-archive"
 ```
 
 Implemented rules:
@@ -60,6 +65,7 @@ Routing:
 
 - URGENT alerts -> `nurse-urgent-alerts`
 - WARNING alerts -> `nurse-warnings`
+- ALL alerts (append-only archive stream) -> `alert-archive`
 
 ### 6) Run the nurse station consumers
 
@@ -77,7 +83,19 @@ python scripts/nurse_station_consumer.py --queue nurse-urgent-alerts --redis-ena
 python scripts/nurse_station_consumer.py --queue nurse-warnings --station-mode warning --redis-enabled --redis-host localhost --redis-port 6379
 ```
 
-### 7) Open the browser dashboard
+### 7) Verify DynamoDB historical alert log
+
+All alerts are archived by the Spring Boot listener into DynamoDB table `wecare-alert-history`.
+
+If AWS CLI is installed:
+
+```powershell
+aws dynamodb scan --table-name wecare-alert-history --endpoint-url http://localhost:4566 --region us-east-1
+```
+
+You should see append-only items including fields such as `alert_id`, `rule`, `severity`, `patient_id`, `source_queue`, `detected_at`, and `raw_payload`.
+
+### 8) Open the browser dashboard
 
 With Spring Boot running, open:
 

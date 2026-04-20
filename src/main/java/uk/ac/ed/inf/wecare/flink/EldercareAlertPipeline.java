@@ -109,6 +109,14 @@ public class EldercareAlertPipeline {
                         config.rabbitPassword(),
                 config.warningQueue()));
 
+        allAlerts
+            .addSink(new RabbitMqAlertSink(
+                config.rabbitHost(),
+                config.rabbitPort(),
+                config.rabbitUsername(),
+                config.rabbitPassword(),
+                config.archiveQueue()));
+
         env.execute("WeCare Eldercare Alert Pipeline");
     }
 
@@ -466,6 +474,7 @@ public class EldercareAlertPipeline {
             String rabbitPassword,
             String urgentQueue,
             String warningQueue,
+            String archiveQueue,
             int parallelism
     ) {
         static PipelineConfig fromArgs(String[] args) {
@@ -481,6 +490,7 @@ public class EldercareAlertPipeline {
                     values.getOrDefault("rabbit-password", "guest"),
                     values.getOrDefault("urgent-queue", "nurse-urgent-alerts"),
                     values.getOrDefault("warning-queue", "nurse-warnings"),
+                    values.getOrDefault("archive-queue", "alert-archive"),
                     Integer.parseInt(values.getOrDefault("parallelism", "1"))
             );
         }

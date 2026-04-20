@@ -31,6 +31,6 @@ public class DynamoDBConfig {
         return DynamoDbClient.builder()
                 .endpointOverride(URI.create(endpoint))
                 .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
-                .region(Region.US_EAST_1).build();
+                .region(Region.of(region)).build();
     }
 }
