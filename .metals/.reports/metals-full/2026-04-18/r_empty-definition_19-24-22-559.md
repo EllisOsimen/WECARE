@@ -1,3 +1,14 @@
+error id: file:///C:/Users/ellis/OneDrive/Documents/ACP/WeCare/WeCare/src/main/java/uk/ac/ed/inf/wecare/flink/EldercareAlertPipeline.java:_empty_/`<any>`#flatMap#
+file:///C:/Users/ellis/OneDrive/Documents/ACP/WeCare/WeCare/src/main/java/uk/ac/ed/inf/wecare/flink/EldercareAlertPipeline.java
+empty definition using pc, found symbol in pc: _empty_/`<any>`#flatMap#
+empty definition using semanticdb
+empty definition using fallback
+non-local guesses:
+
+offset: 2720
+uri: file:///C:/Users/ellis/OneDrive/Documents/ACP/WeCare/WeCare/src/main/java/uk/ac/ed/inf/wecare/flink/EldercareAlertPipeline.java
+text:
+```scala
 package uk.ac.ed.inf.wecare.flink;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -9,7 +20,6 @@ import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.MessageProperties;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
-import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
@@ -56,39 +66,23 @@ public class EldercareAlertPipeline {
 
         DataStream<PatientTelemetry> telemetry = env
                 .fromSource(kafkaSource, org.apache.flink.api.common.eventtime.WatermarkStrategy.noWatermarks(), "elder-vitals-source")
-                .flatMap(new TelemetryParser())
-                .returns(TypeInformation.of(PatientTelemetry.class));
+            .@@flatMap(new TelemetryParser());
 
         DataStream<AlertEnvelope> vitalsAlerts = telemetry
                 .filter(t -> t.oxygenLevel() < 90)
-                .map(EldercareAlertPipeline::buildVitalsAlert)
-                .returns(TypeInformation.of(AlertEnvelope.class));
+            .map(EldercareAlertPipeline::buildVitalsAlert);
 
         DataStream<AlertEnvelope> geofenceAlerts = telemetry
                 .filter(t -> "Exit Gate".equalsIgnoreCase(t.locationZone()))
-                .map(EldercareAlertPipeline::buildGeofenceAlert)
-                .returns(TypeInformation.of(AlertEnvelope.class));
-
-        DataStream<AlertEnvelope> fallAlerts = telemetry
-            .filter(t -> "Fall Detected".equalsIgnoreCase(t.movementStatus()))
-            .map(EldercareAlertPipeline::buildFallAlert)
-            .returns(TypeInformation.of(AlertEnvelope.class));
-
-        DataStream<AlertEnvelope> recoveryAlerts = telemetry
-            .filter(t -> "Recovered".equalsIgnoreCase(t.movementStatus()))
-            .map(EldercareAlertPipeline::buildRecoveryAlert)
-            .returns(TypeInformation.of(AlertEnvelope.class));
+            .map(EldercareAlertPipeline::buildGeofenceAlert);
 
         DataStream<AlertEnvelope> heartTrendAlerts = telemetry
                 .keyBy(PatientTelemetry::patientId)
                 .window(TumblingProcessingTimeWindows.of(Time.seconds(10)))
-                .process(new HeartRateTrendRule())
-                .returns(TypeInformation.of(AlertEnvelope.class));
+            .process(new HeartRateTrendRule());
 
         DataStream<AlertEnvelope> allAlerts = vitalsAlerts
                 .union(geofenceAlerts)
-            .union(fallAlerts)
-            .union(recoveryAlerts)
             .union(heartTrendAlerts);
 
         allAlerts
@@ -156,47 +150,6 @@ public class EldercareAlertPipeline {
         );
     }
 
-            private static AlertEnvelope buildFallAlert(PatientTelemetry telemetry) {
-            String message = String.format(
-                "Fall detected for patient %d in %s",
-                telemetry.patientId(),
-                telemetry.locationZone()
-            );
-
-            return new AlertEnvelope(
-                "URGENT",
-                buildAlertJson(
-                    telemetry,
-                    "FALL_DETECTED",
-                    "CRITICAL",
-                    message,
-                    null,
-                    null,
-                    null
-                )
-            );
-            }
-
-            private static AlertEnvelope buildRecoveryAlert(PatientTelemetry telemetry) {
-            String message = String.format(
-                "Patient %d recovered and returned to baseline telemetry",
-                telemetry.patientId()
-            );
-
-            return new AlertEnvelope(
-                "URGENT",
-                buildAlertJson(
-                    telemetry,
-                    "PATIENT_RECOVERED",
-                    "NORMAL",
-                    message,
-                    null,
-                    null,
-                    null
-                )
-            );
-            }
-
     private static String buildAlertJson(
             PatientTelemetry telemetry,
             String rule,
@@ -237,7 +190,7 @@ public class EldercareAlertPipeline {
         }
     }
 
-    public static class AlertEnvelope implements Serializable {
+    private static class AlertEnvelope implements Serializable {
         public String priority;
         public String payload;
 
@@ -258,7 +211,7 @@ public class EldercareAlertPipeline {
         }
     }
 
-    public static class PatientTelemetry implements Serializable {
+    private static class PatientTelemetry implements Serializable {
         public int patientId;
         public int heartRate;
         public int oxygenLevel;
@@ -505,3 +458,10 @@ public class EldercareAlertPipeline {
         }
     }
 }
+
+```
+
+
+#### Short summary: 
+
+empty definition using pc, found symbol in pc: _empty_/`<any>`#flatMap#

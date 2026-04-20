@@ -5,7 +5,7 @@ Interactive commands while running:
 - crash <patient_id>   : force oxygen drop (around 85)
 - wander <patient_id>  : force location to Exit Gate
 - fall <patient_id>    : force movement status to Fall Detected
-- recover <patient_id> : remove all forced anomalies for a patient
+- recover <patient_id> : remove all forced anomalies and emit one Recovered event
 - help                 : print command help
 - exit                 : stop the simulator
 """
@@ -75,6 +75,7 @@ class AnomalyState:
         self.crash: Set[int] = set()
         self.wander: Set[int] = set()
         self.fall: Set[int] = set()
+        self.recovered: Set[int] = set()
         self.lock = threading.Lock()
 
     def force(self, command: str, patient_id: int) -> None:
@@ -91,6 +92,11 @@ class AnomalyState:
             self.crash.discard(patient_id)
             self.wander.discard(patient_id)
             self.fall.discard(patient_id)
+            self.recovered.add(patient_id)
+
+    def clear_recovery_signal(self, patient_id: int) -> None:
+        with self.lock:
+            self.recovered.discard(patient_id)
 
     def snapshot(self) -> Dict[str, Set[int]]:
         with self.lock:
@@ -98,6 +104,7 @@ class AnomalyState:
                 "crash": set(self.crash),
                 "wander": set(self.wander),
                 "fall": set(self.fall),
+                "recovered": set(self.recovered),
             }
 
 
@@ -123,6 +130,12 @@ def build_payload(patient: Patient, anomaly_state: AnomalyState) -> Dict[str, ob
 
     if patient.patient_id in forced["fall"]:
         movement_status = "Fall Detected"
+
+    if patient.patient_id in forced["recovered"]:
+        movement_status = "Recovered"
+        heart_rate = clamp(int(random.gauss(patient.baseline_heart_rate, 3)), 55, 110)
+        oxygen_level = clamp(int(random.gauss(patient.baseline_oxygen_level, 1)), 94, 100)
+        location_zone = patient.home_zone
 
     return {
         "patient_id": patient.patient_id,
@@ -256,6 +269,9 @@ def main() -> None:
                     key=patient.patient_id,
                     value=payload,
                 ).get(timeout=10)
+
+                if payload["movement_status"] == "Recovered":
+                    anomaly_state.clear_recovery_signal(patient.patient_id)
 
                 print(
                     f"sent patient={payload['patient_id']} "

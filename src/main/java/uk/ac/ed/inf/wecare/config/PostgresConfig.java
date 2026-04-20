@@ -3,12 +3,14 @@ package uk.ac.ed.inf.wecare.config;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import javax.sql.DataSource;
 
 @Configuration
+@ConditionalOnProperty(prefix = "wecare.integrations.postgres", name = "enabled", havingValue = "true")
 public class PostgresConfig {
     @Value("${spring.datasource.url}")
     private String url;

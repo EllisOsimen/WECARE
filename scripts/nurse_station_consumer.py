@@ -87,6 +87,12 @@ def format_alert(alert: dict, station_mode: str) -> str:
 def store_patient_status(redis_client, alert: dict, station_mode: str) -> None:
     patient_id = alert.get("patient_id", "unknown")
     key = f"patient_{patient_id}_status"
+    rule = str(alert.get("rule", ""))
+
+    if rule == "PATIENT_RECOVERED":
+        redis_client.delete(key)
+        print(f"Patient {patient_id} recovered - removed from active dashboard statuses")
+        return
 
     redis_client.hset(
         key,

@@ -20,6 +20,16 @@ public class PatientStatusService {
     private static final String STATUS_KEY_PATTERN = "patient_*_status";
     private static final String PINNED_SET_KEY = "pinned_patients";
     private static final Pattern PATIENT_KEY_REGEX = Pattern.compile("^patient_(\\d+)_status$");
+        private static final Map<Integer, PatientProfile> PATIENT_REGISTRY = Map.of(
+            1, new PatientProfile("Alice Brown", "Room 12", false, 72, 97),
+            2, new PatientProfile("Robert Smith", "Room 14", true, 68, 96),
+            3, new PatientProfile("Fatima Khan", "Room 19", false, 75, 98),
+            4, new PatientProfile("George Wilson", "Room 12", true, 70, 95),
+            5, new PatientProfile("Mary Johnson", "Room 14", false, 66, 97),
+            6, new PatientProfile("Daniel Lee", "Room 19", false, 74, 96),
+            7, new PatientProfile("Nora Adams", "Room 12", true, 69, 95),
+            8, new PatientProfile("Samuel Clarke", "Room 14", false, 71, 97)
+        );
 
     private final RedisTemplate<String, String> redisTemplate;
 
@@ -40,14 +50,22 @@ public class PatientStatusService {
                 }
 
                 Map<Object, Object> statusMap = redisTemplate.opsForHash().entries(key);
+                PatientProfile profile = profileForPatient(patientId);
+
                 byPatientId.put(patientId, new PatientStatusView(
                         patientId,
+                        profile.name(),
                         valueOrDefault(statusMap.get("status"), "UNKNOWN"),
                         valueOrDefault(statusMap.get("last_rule"), "UNKNOWN_RULE"),
                         valueOrDefault(statusMap.get("last_message"), "No message"),
                         valueOrDefault(statusMap.get("location_zone"), "Unknown"),
+                        profile.homeZone(),
+                        profile.dementiaFlag(),
+                        profile.baselineHeartRate(),
+                        profile.baselineOxygenLevel(),
                         valueOrDefault(statusMap.get("updated_at"), "Unknown"),
-                        pinnedPatients.contains(patientId)
+                        pinnedPatients.contains(patientId),
+                        true
                 ));
             }
         }
@@ -57,14 +75,22 @@ public class PatientStatusService {
                 continue;
             }
 
+            PatientProfile profile = profileForPatient(pinnedPatientId);
+
             byPatientId.put(pinnedPatientId, new PatientStatusView(
                     pinnedPatientId,
-                    "PINNED_NO_ALERT_YET",
-                    "NONE",
-                    "No alerts received yet",
-                    "Unknown",
-                    "Unknown",
-                    true
+                    profile.name(),
+                    "NORMAL",
+                    "NO_ACTIVE_ALERT",
+                    "Pinned patient monitored, no active alerts",
+                    profile.homeZone(),
+                    profile.homeZone(),
+                    profile.dementiaFlag(),
+                    profile.baselineHeartRate(),
+                    profile.baselineOxygenLevel(),
+                    "N/A",
+                    true,
+                    false
             ));
         }
 
@@ -117,5 +143,21 @@ public class PatientStatusService {
 
     private String valueOrDefault(Object value, String fallback) {
         return value == null ? fallback : value.toString();
+    }
+
+    private PatientProfile profileForPatient(int patientId) {
+        return PATIENT_REGISTRY.getOrDefault(
+                patientId,
+                new PatientProfile("Patient " + patientId, "Unknown", false, 70, 96)
+        );
+    }
+
+    private record PatientProfile(
+            String name,
+            String homeZone,
+            boolean dementiaFlag,
+            int baselineHeartRate,
+            int baselineOxygenLevel
+    ) {
     }
 }

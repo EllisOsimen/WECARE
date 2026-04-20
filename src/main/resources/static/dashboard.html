@@ -313,16 +313,25 @@
             card.className = `card ${patient.pinned ? "pinned" : ""}`;
 
             const safeStatus = escapeHtml(patient.status);
+            const safeName = escapeHtml(patient.patientName || `Patient ${patient.patientId}`);
             const safeRule = escapeHtml(patient.lastRule);
             const safeMsg = escapeHtml(patient.lastMessage);
             const safeLoc = escapeHtml(patient.locationZone);
+            const safeHome = escapeHtml(patient.homeZone || "Unknown");
+            const safeDementia = patient.dementiaFlag ? "Yes" : "No";
+            const safeBaseline = `${patient.baselineHeartRate ?? "?"} bpm / SpO2 ${patient.baselineOxygenLevel ?? "?"}%`;
             const safeUpdated = escapeHtml(patient.updatedAt);
+            const activeLabel = patient.activeAlert ? "Active alert" : "Monitoring";
 
             card.innerHTML = `
                 <div class="card-head">
-                    <h3 class="patient-label">Patient ${patient.patientId}</h3>
+                    <h3 class="patient-label">${safeName} (ID ${patient.patientId})</h3>
                     <span class="tag ${badgeClass(patient.status)}">${safeStatus}</span>
                 </div>
+                <p class="details"><strong>State:</strong> ${activeLabel}</p>
+                <p class="details"><strong>Home Zone:</strong> ${safeHome}</p>
+                <p class="details"><strong>Dementia Flag:</strong> ${safeDementia}</p>
+                <p class="details"><strong>Baseline:</strong> ${safeBaseline}</p>
                 <p class="details"><strong>Rule:</strong> ${safeRule}</p>
                 <p class="details"><strong>Location:</strong> ${safeLoc}</p>
                 <p class="details"><strong>Updated:</strong> ${safeUpdated}</p>
