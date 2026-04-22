@@ -3,6 +3,9 @@
 
 Interactive commands while running:
 - crash <patient_id>   : force oxygen drop (around 85)
+- oxygen <patient_id>  : force oxygen below 90 (Rule A)
+- hrlow <patient_id>   : force sustained low heart rate (10s trend rule)
+- hrhigh <patient_id>  : force sustained high heart rate (10s trend rule)
 - wander <patient_id>  : force location to Exit Gate
 - fall <patient_id>    : force movement status to Fall Detected
 - recover <patient_id> : remove all forced anomalies and emit one Recovered event
@@ -40,6 +43,11 @@ ZONES = [
 
 MOVEMENT_STATES = ["Active", "Resting"]
 
+COMMAND_HELP = (
+    "Commands: crash <id>, oxygen <id>, hrlow <id>, hrhigh <id>, "
+    "wander <id>, fall <id>, recover <id>, help, exit"
+)
+
 
 @dataclass(frozen=True)
 class Patient:
@@ -73,6 +81,9 @@ def clamp(value: int, low: int, high: int) -> int:
 class AnomalyState:
     def __init__(self) -> None:
         self.crash: Set[int] = set()
+        self.oxygen_low: Set[int] = set()
+        self.hr_trend_low: Set[int] = set()
+        self.hr_trend_high: Set[int] = set()
         self.wander: Set[int] = set()
         self.fall: Set[int] = set()
         self.recovered: Set[int] = set()
@@ -82,6 +93,20 @@ class AnomalyState:
         with self.lock:
             if command == "crash":
                 self.crash.add(patient_id)
+                self.oxygen_low.discard(patient_id)
+                self.hr_trend_low.discard(patient_id)
+                self.hr_trend_high.discard(patient_id)
+            elif command == "oxygen":
+                self.oxygen_low.add(patient_id)
+                self.crash.discard(patient_id)
+            elif command == "hrlow":
+                self.hr_trend_low.add(patient_id)
+                self.hr_trend_high.discard(patient_id)
+                self.crash.discard(patient_id)
+            elif command == "hrhigh":
+                self.hr_trend_high.add(patient_id)
+                self.hr_trend_low.discard(patient_id)
+                self.crash.discard(patient_id)
             elif command == "wander":
                 self.wander.add(patient_id)
             elif command == "fall":
@@ -90,6 +115,9 @@ class AnomalyState:
     def recover(self, patient_id: int) -> None:
         with self.lock:
             self.crash.discard(patient_id)
+            self.oxygen_low.discard(patient_id)
+            self.hr_trend_low.discard(patient_id)
+            self.hr_trend_high.discard(patient_id)
             self.wander.discard(patient_id)
             self.fall.discard(patient_id)
             self.recovered.add(patient_id)
@@ -102,6 +130,9 @@ class AnomalyState:
         with self.lock:
             return {
                 "crash": set(self.crash),
+                "oxygen_low": set(self.oxygen_low),
+                "hr_trend_low": set(self.hr_trend_low),
+                "hr_trend_high": set(self.hr_trend_high),
                 "wander": set(self.wander),
                 "fall": set(self.fall),
                 "recovered": set(self.recovered),
@@ -124,6 +155,15 @@ def build_payload(patient: Patient, anomaly_state: AnomalyState) -> Dict[str, ob
     if patient.patient_id in forced["crash"]:
         oxygen_level = random.choice([84, 85, 86])
         heart_rate = random.choice([46, 48, 50])
+
+    if patient.patient_id in forced["oxygen_low"]:
+        oxygen_level = random.choice([86, 87, 88])
+
+    if patient.patient_id in forced["hr_trend_low"]:
+        heart_rate = random.choice([42, 43, 44])
+
+    if patient.patient_id in forced["hr_trend_high"]:
+        heart_rate = random.choice([132, 134, 136])
 
     if patient.patient_id in forced["wander"]:
         location_zone = "Exit Gate"
@@ -149,7 +189,7 @@ def build_payload(patient: Patient, anomaly_state: AnomalyState) -> Dict[str, ob
 
 
 def command_listener(stop_event: threading.Event, anomaly_state: AnomalyState, valid_ids: Set[int]) -> None:
-    print("Commands: crash <id>, wander <id>, fall <id>, recover <id>, help, exit")
+    print(COMMAND_HELP)
 
     while not stop_event.is_set():
         try:
@@ -166,12 +206,12 @@ def command_listener(stop_event: threading.Event, anomaly_state: AnomalyState, v
             return
 
         if command_line == "help":
-            print("Commands: crash <id>, wander <id>, fall <id>, recover <id>, help, exit")
+            print(COMMAND_HELP)
             continue
 
         parts = command_line.split()
         if len(parts) != 2 or not parts[1].isdigit():
-            print("Invalid command. Use: crash <id>, wander <id>, fall <id>, recover <id>")
+            print("Invalid command. Use '<action> <id>' or type 'help'.")
             continue
 
         action, id_text = parts
@@ -181,14 +221,14 @@ def command_listener(stop_event: threading.Event, anomaly_state: AnomalyState, v
             print(f"Unknown patient_id {patient_id}. Valid IDs: {sorted(valid_ids)}")
             continue
 
-        if action in {"crash", "wander", "fall"}:
+        if action in {"crash", "oxygen", "hrlow", "hrhigh", "wander", "fall"}:
             anomaly_state.force(action, patient_id)
             print(f"Applied '{action}' anomaly to patient {patient_id}")
         elif action == "recover":
             anomaly_state.recover(patient_id)
             print(f"Recovered patient {patient_id} to normal telemetry")
         else:
-            print("Unknown action. Use: crash, wander, fall, recover")
+            print("Unknown action. Type 'help' to see supported commands.")
 
 
 def parse_args() -> argparse.Namespace:

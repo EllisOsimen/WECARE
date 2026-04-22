@@ -40,6 +40,9 @@ python scripts/patient_telemetry_simulator.py --topic elder-vitals-inbound --int
 Type into the simulator terminal:
 
 - `crash 3` (forces low oxygen around 85 for patient 3)
+- `oxygen 3` (forces SpO2 below 90 for patient 3 to trigger Rule 1)
+- `hrlow 3` (forces sustained low heart rate to trigger 10s heart-rate trend rule)
+- `hrhigh 3` (forces sustained high heart rate to trigger 10s heart-rate trend rule)
 - `wander 3` (forces patient 3 to `Exit Gate`)
 - `fall 3` (forces `Fall Detected`)
 - `recover 3` (returns patient 3 to normal behavior and clears active alert status from dashboard)
