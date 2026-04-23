@@ -66,6 +66,7 @@ def format_alert(alert: dict, station_mode: str) -> str:
     location = alert.get("location_zone", "Unknown")
     detected_at = alert.get("detected_at", datetime.now(timezone.utc).isoformat())
     severity = alert.get("severity", "UNKNOWN")
+    incident_event_type = alert.get("incident_event_type", "ALERT")
 
     if station_mode == "warning":
         banner = f"{YELLOW_BG} \u26A0\uFE0F WARNING ALERT \u26A0\uFE0F {RESET}"
@@ -75,6 +76,7 @@ def format_alert(alert: dict, station_mode: str) -> str:
     details = (
         f"\nPatient: {patient_id}"
         f"\nRule: {rule}"
+        f"\nEvent: {incident_event_type}"
         f"\nSeverity: {severity}"
         f"\nLocation: {location}"
         f"\nDetected: {detected_at}"
@@ -88,6 +90,23 @@ def store_patient_status(redis_client, alert: dict, station_mode: str) -> None:
     patient_id = alert.get("patient_id", "unknown")
     key = f"patient_{patient_id}_status"
     rule = str(alert.get("rule", ""))
+    incident_event_type = str(alert.get("incident_event_type", ""))
+
+    if incident_event_type == "INCIDENT_RESOLVED":
+        try:
+            active_incident_count = int(alert.get("active_incident_count", 0))
+        except (TypeError, ValueError):
+            active_incident_count = 0
+
+        if active_incident_count <= 0:
+            redis_client.delete(key)
+            print(f"Patient {patient_id} resolved all incidents - removed from active dashboard statuses")
+        else:
+            print(
+                f"Patient {patient_id} resolved one incident but still has "
+                f"{active_incident_count} active incident(s); keeping dashboard status"
+            )
+        return
 
     if rule == "PATIENT_RECOVERED":
         redis_client.delete(key)

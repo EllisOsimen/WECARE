@@ -41,6 +41,17 @@ public class PatientStatusService {
         Set<Integer> pinnedPatients = getPinnedPatients();
         Map<Integer, PatientStatusView> byPatientId = new HashMap<>();
 
+        for (Map.Entry<Integer, PatientProfile> entry : PATIENT_REGISTRY.entrySet()) {
+            int patientId = entry.getKey();
+            PatientProfile profile = entry.getValue();
+
+            byPatientId.put(patientId, buildMonitoringView(
+                    patientId,
+                    profile,
+                    pinnedPatients.contains(patientId)
+            ));
+        }
+
         Set<String> keys = redisTemplate.keys(STATUS_KEY_PATTERN);
         if (keys != null) {
             for (String key : keys) {
@@ -76,28 +87,13 @@ public class PatientStatusService {
             }
 
             PatientProfile profile = profileForPatient(pinnedPatientId);
-
-            byPatientId.put(pinnedPatientId, new PatientStatusView(
-                    pinnedPatientId,
-                    profile.name(),
-                    "NORMAL",
-                    "NO_ACTIVE_ALERT",
-                    "Pinned patient monitored, no active alerts",
-                    profile.homeZone(),
-                    profile.homeZone(),
-                    profile.dementiaFlag(),
-                    profile.baselineHeartRate(),
-                    profile.baselineOxygenLevel(),
-                    "N/A",
-                    true,
-                    false
-            ));
+            byPatientId.put(pinnedPatientId, buildMonitoringView(pinnedPatientId, profile, true));
         }
 
         List<PatientStatusView> result = new ArrayList<>(byPatientId.values());
         result.sort(Comparator
-                .comparing(PatientStatusView::pinned)
-                .reversed()
+                .comparing((PatientStatusView status) -> status.pinned() ? 0 : 1)
+                .thenComparing((PatientStatusView status) -> isCriticalStatus(status.status()) ? 0 : 1)
                 .thenComparing(PatientStatusView::patientId));
 
         return result;
@@ -143,6 +139,33 @@ public class PatientStatusService {
 
     private String valueOrDefault(Object value, String fallback) {
         return value == null ? fallback : value.toString();
+    }
+
+    private boolean isCriticalStatus(String status) {
+        if (status == null) {
+            return false;
+        }
+
+        String normalized = status.toUpperCase();
+        return normalized.contains("CRITICAL") || normalized.contains("URGENT");
+    }
+
+    private PatientStatusView buildMonitoringView(int patientId, PatientProfile profile, boolean pinned) {
+        return new PatientStatusView(
+                patientId,
+                profile.name(),
+                "NORMAL",
+                "NO_ACTIVE_ALERT",
+                "Monitored patient, no active alerts",
+                profile.homeZone(),
+                profile.homeZone(),
+                profile.dementiaFlag(),
+                profile.baselineHeartRate(),
+                profile.baselineOxygenLevel(),
+                "N/A",
+                pinned,
+                false
+        );
     }
 
     private PatientProfile profileForPatient(int patientId) {

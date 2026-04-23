@@ -131,6 +131,38 @@
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
         }
 
+        .board-sections {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .board-section {
+            display: grid;
+            gap: 0.7rem;
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+        }
+
+        .section-title {
+            margin: 0;
+            font-size: 1.05rem;
+            letter-spacing: 0.2px;
+        }
+
+        .critical-title {
+            color: var(--urgent);
+        }
+
+        .normal-title {
+            color: #2a4a77;
+        }
+
         .card {
             background: var(--panel);
             border: 1px solid var(--line);
@@ -144,6 +176,18 @@
         .card.pinned {
             border-color: #f2bf58;
             box-shadow: 0 0 0 2px rgba(242, 191, 88, 0.28);
+        }
+
+        .card.critical-state {
+            border-color: #e27d78;
+            box-shadow: 0 0 0 2px rgba(183, 15, 10, 0.22);
+            background: linear-gradient(180deg, #fff8f7 0%, #ffffff 70%);
+        }
+
+        .card.warning-state {
+            border-color: #ebcf90;
+            box-shadow: 0 0 0 2px rgba(155, 108, 0, 0.16);
+            background: linear-gradient(180deg, #fffaf0 0%, #ffffff 70%);
         }
 
         .card-head {
@@ -215,6 +259,11 @@
             color: var(--muted);
             text-align: center;
         }
+
+        .subsection-empty {
+            padding: 0.9rem;
+            font-size: 0.92rem;
+        }
     </style>
 </head>
 <body>
@@ -240,12 +289,36 @@
         </form>
     </section>
 
-    <section id="cards" class="grid"></section>
+    <section id="patient-sections" class="board-sections">
+        <section class="board-section">
+            <div class="section-head">
+                <h2 class="section-title critical-title">Critical Condition Patients</h2>
+                <span class="pill" id="critical-count">Critical: 0</span>
+            </div>
+            <section id="critical-cards" class="grid"></section>
+            <section id="critical-empty" class="empty subsection-empty" style="display:none;">No patients are currently in a critical condition.</section>
+        </section>
+
+        <section class="board-section">
+            <div class="section-head">
+                <h2 class="section-title normal-title">Normal Condition Patients</h2>
+                <span class="pill" id="normal-count">Normal: 0</span>
+            </div>
+            <section id="normal-cards" class="grid"></section>
+            <section id="normal-empty" class="empty subsection-empty" style="display:none;">No patients are currently in a normal condition.</section>
+        </section>
+    </section>
     <section id="empty" class="empty" style="display:none;">No patient statuses in Redis yet. Trigger an alert from simulator/Flink, or pin a patient ID manually.</section>
 </div>
 
 <script>
-    const cards = document.getElementById("cards");
+    const patientSections = document.getElementById("patient-sections");
+    const criticalCards = document.getElementById("critical-cards");
+    const normalCards = document.getElementById("normal-cards");
+    const criticalEmpty = document.getElementById("critical-empty");
+    const normalEmpty = document.getElementById("normal-empty");
+    const criticalCountPill = document.getElementById("critical-count");
+    const normalCountPill = document.getElementById("normal-count");
     const empty = document.getElementById("empty");
     const refreshBtn = document.getElementById("refresh-btn");
     const toggleAutoBtn = document.getElementById("toggle-auto-btn");
@@ -266,6 +339,17 @@
             return "warning";
         }
         return "neutral";
+    }
+
+    function cardSeverityClass(status) {
+        const badge = badgeClass(status);
+        if (badge === "critical") {
+            return "critical-state";
+        }
+        if (badge === "warning") {
+            return "warning-state";
+        }
+        return "";
     }
 
     function escapeHtml(text) {
@@ -295,55 +379,76 @@
         render(patients);
     }
 
+    function createPatientCard(patient) {
+        const card = document.createElement("article");
+        card.className = `card ${patient.pinned ? "pinned" : ""} ${cardSeverityClass(patient.status)}`.trim();
+
+        const safeStatus = escapeHtml(patient.status);
+        const safeName = escapeHtml(patient.patientName || `Patient ${patient.patientId}`);
+        const safeRule = escapeHtml(patient.lastRule);
+        const safeMsg = escapeHtml(patient.lastMessage);
+        const safeLoc = escapeHtml(patient.locationZone);
+        const safeHome = escapeHtml(patient.homeZone || "Unknown");
+        const safeDementia = patient.dementiaFlag ? "Yes" : "No";
+        const safeBaseline = `${patient.baselineHeartRate ?? "?"} bpm / SpO2 ${patient.baselineOxygenLevel ?? "?"}%`;
+        const safeUpdated = escapeHtml(patient.updatedAt);
+        const activeLabel = patient.activeAlert ? "Active alert" : "Monitoring";
+
+        card.innerHTML = `
+            <div class="card-head">
+                <h3 class="patient-label">${safeName} (ID ${patient.patientId})</h3>
+                <span class="tag ${badgeClass(patient.status)}">${safeStatus}</span>
+            </div>
+            <p class="details"><strong>State:</strong> ${activeLabel}</p>
+            <p class="details"><strong>Home Zone:</strong> ${safeHome}</p>
+            <p class="details"><strong>Dementia Flag:</strong> ${safeDementia}</p>
+            <p class="details"><strong>Baseline:</strong> ${safeBaseline}</p>
+            <p class="details"><strong>Rule:</strong> ${safeRule}</p>
+            <p class="details"><strong>Location:</strong> ${safeLoc}</p>
+            <p class="details"><strong>Updated:</strong> ${safeUpdated}</p>
+            <p class="details"><strong>Message:</strong> ${safeMsg}</p>
+            <div class="actions">
+                <button class="${patient.pinned ? "unpin-btn" : "pin-btn"}" data-id="${patient.patientId}" data-pinned="${patient.pinned}">
+                    ${patient.pinned ? "Unpin" : "Pin"}
+                </button>
+            </div>
+        `;
+
+        return card;
+    }
+
     function render(patients) {
-        cards.innerHTML = "";
+        criticalCards.innerHTML = "";
+        normalCards.innerHTML = "";
 
         if (!Array.isArray(patients) || patients.length === 0) {
             empty.style.display = "block";
+            patientSections.style.display = "none";
             counts.textContent = "Patients: 0 | Pinned: 0";
+            criticalCountPill.textContent = "Critical: 0";
+            normalCountPill.textContent = "Normal: 0";
             return;
         }
 
         empty.style.display = "none";
+        patientSections.style.display = "grid";
         const pinnedCount = patients.filter(p => p.pinned).length;
-        counts.textContent = `Patients: ${patients.length} | Pinned: ${pinnedCount}`;
+        const criticalCount = patients.filter(p => badgeClass(p.status) === "critical").length;
+        const normalPatients = patients.filter(p => badgeClass(p.status) !== "critical");
+        const criticalPatients = patients.filter(p => badgeClass(p.status) === "critical");
+        counts.textContent = `Patients: ${patients.length} | Pinned: ${pinnedCount} | Critical: ${criticalCount}`;
+        criticalCountPill.textContent = `Critical: ${criticalPatients.length}`;
+        normalCountPill.textContent = `Normal: ${normalPatients.length}`;
 
-        for (const patient of patients) {
-            const card = document.createElement("article");
-            card.className = `card ${patient.pinned ? "pinned" : ""}`;
+        criticalEmpty.style.display = criticalPatients.length === 0 ? "block" : "none";
+        normalEmpty.style.display = normalPatients.length === 0 ? "block" : "none";
 
-            const safeStatus = escapeHtml(patient.status);
-            const safeName = escapeHtml(patient.patientName || `Patient ${patient.patientId}`);
-            const safeRule = escapeHtml(patient.lastRule);
-            const safeMsg = escapeHtml(patient.lastMessage);
-            const safeLoc = escapeHtml(patient.locationZone);
-            const safeHome = escapeHtml(patient.homeZone || "Unknown");
-            const safeDementia = patient.dementiaFlag ? "Yes" : "No";
-            const safeBaseline = `${patient.baselineHeartRate ?? "?"} bpm / SpO2 ${patient.baselineOxygenLevel ?? "?"}%`;
-            const safeUpdated = escapeHtml(patient.updatedAt);
-            const activeLabel = patient.activeAlert ? "Active alert" : "Monitoring";
+        for (const patient of criticalPatients) {
+            criticalCards.appendChild(createPatientCard(patient));
+        }
 
-            card.innerHTML = `
-                <div class="card-head">
-                    <h3 class="patient-label">${safeName} (ID ${patient.patientId})</h3>
-                    <span class="tag ${badgeClass(patient.status)}">${safeStatus}</span>
-                </div>
-                <p class="details"><strong>State:</strong> ${activeLabel}</p>
-                <p class="details"><strong>Home Zone:</strong> ${safeHome}</p>
-                <p class="details"><strong>Dementia Flag:</strong> ${safeDementia}</p>
-                <p class="details"><strong>Baseline:</strong> ${safeBaseline}</p>
-                <p class="details"><strong>Rule:</strong> ${safeRule}</p>
-                <p class="details"><strong>Location:</strong> ${safeLoc}</p>
-                <p class="details"><strong>Updated:</strong> ${safeUpdated}</p>
-                <p class="details"><strong>Message:</strong> ${safeMsg}</p>
-                <div class="actions">
-                    <button class="${patient.pinned ? "unpin-btn" : "pin-btn"}" data-id="${patient.patientId}" data-pinned="${patient.pinned}">
-                        ${patient.pinned ? "Unpin" : "Pin"}
-                    </button>
-                </div>
-            `;
-
-            cards.appendChild(card);
+        for (const patient of normalPatients) {
+            normalCards.appendChild(createPatientCard(patient));
         }
     }
 
@@ -356,7 +461,7 @@
         }
     }
 
-    cards.addEventListener("click", async (event) => {
+    patientSections.addEventListener("click", async (event) => {
         const button = event.target.closest("button[data-id]");
         if (!button) {
             return;

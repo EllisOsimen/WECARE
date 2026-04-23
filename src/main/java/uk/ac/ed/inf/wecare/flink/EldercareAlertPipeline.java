@@ -7,6 +7,8 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.MessageProperties;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -15,6 +17,7 @@ import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
@@ -59,25 +62,10 @@ public class EldercareAlertPipeline {
                 .flatMap(new TelemetryParser())
                 .returns(TypeInformation.of(PatientTelemetry.class));
 
-        DataStream<AlertEnvelope> vitalsAlerts = telemetry
-                .filter(t -> t.oxygenLevel() < 90)
-                .map(EldercareAlertPipeline::buildVitalsAlert)
+        DataStream<AlertEnvelope> incidentLifecycleAlerts = telemetry
+            .keyBy(PatientTelemetry::patientId)
+            .process(new IncidentLifecyclePolicy(config.incidentHeartbeatSeconds()))
                 .returns(TypeInformation.of(AlertEnvelope.class));
-
-        DataStream<AlertEnvelope> geofenceAlerts = telemetry
-                .filter(t -> "Exit Gate".equalsIgnoreCase(t.locationZone()))
-                .map(EldercareAlertPipeline::buildGeofenceAlert)
-                .returns(TypeInformation.of(AlertEnvelope.class));
-
-        DataStream<AlertEnvelope> fallAlerts = telemetry
-            .filter(t -> "Fall Detected".equalsIgnoreCase(t.movementStatus()))
-            .map(EldercareAlertPipeline::buildFallAlert)
-            .returns(TypeInformation.of(AlertEnvelope.class));
-
-        DataStream<AlertEnvelope> recoveryAlerts = telemetry
-            .filter(t -> "Recovered".equalsIgnoreCase(t.movementStatus()))
-            .map(EldercareAlertPipeline::buildRecoveryAlert)
-            .returns(TypeInformation.of(AlertEnvelope.class));
 
         DataStream<AlertEnvelope> heartTrendAlerts = telemetry
                 .keyBy(PatientTelemetry::patientId)
@@ -85,10 +73,7 @@ public class EldercareAlertPipeline {
                 .process(new HeartRateTrendRule())
                 .returns(TypeInformation.of(AlertEnvelope.class));
 
-        DataStream<AlertEnvelope> allAlerts = vitalsAlerts
-                .union(geofenceAlerts)
-            .union(fallAlerts)
-            .union(recoveryAlerts)
+        DataStream<AlertEnvelope> allAlerts = incidentLifecycleAlerts
             .union(heartTrendAlerts);
 
         allAlerts
@@ -213,6 +198,28 @@ public class EldercareAlertPipeline {
             Double avgHeartRate,
             String windowStart,
             String windowEnd
+        ) {
+        return buildAlertJson(
+            telemetry,
+            rule,
+            severity,
+            message,
+            avgHeartRate,
+            windowStart,
+            windowEnd,
+            null
+        );
+        }
+
+        private static String buildAlertJson(
+            PatientTelemetry telemetry,
+            String rule,
+            String severity,
+            String message,
+            Double avgHeartRate,
+            String windowStart,
+            String windowEnd,
+            Map<String, Object> extraFields
     ) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("alert_id", UUID.randomUUID().toString());
@@ -236,6 +243,9 @@ public class EldercareAlertPipeline {
         }
         if (windowEnd != null) {
             payload.put("window_end", windowEnd);
+        }
+        if (extraFields != null && !extraFields.isEmpty()) {
+            payload.putAll(extraFields);
         }
 
         try {
@@ -366,6 +376,289 @@ public class EldercareAlertPipeline {
         }
     }
 
+    private static class IncidentState implements Serializable {
+        public boolean active;
+        public String incidentId;
+        public String severity;
+        public String incidentKey;
+        public long startedAtMillis;
+        public long lastHeartbeatAtMillis;
+
+        IncidentState() {
+        }
+
+        static IncidentState inactive() {
+            IncidentState state = new IncidentState();
+            state.active = false;
+            return state;
+        }
+    }
+
+    private static class IncidentLifecyclePolicy extends KeyedProcessFunction<Integer, PatientTelemetry, AlertEnvelope> {
+        private final long heartbeatIntervalMillis;
+
+        private transient ValueState<IncidentState> oxygenState;
+        private transient ValueState<IncidentState> geofenceState;
+        private transient ValueState<IncidentState> fallState;
+
+        IncidentLifecyclePolicy(int heartbeatSeconds) {
+            this.heartbeatIntervalMillis = Math.max(heartbeatSeconds, 1) * 1000L;
+        }
+
+        @Override
+        public void open(Configuration parameters) {
+            oxygenState = getRuntimeContext().getState(new ValueStateDescriptor<>("oxygen-incident-state", IncidentState.class));
+            geofenceState = getRuntimeContext().getState(new ValueStateDescriptor<>("geofence-incident-state", IncidentState.class));
+            fallState = getRuntimeContext().getState(new ValueStateDescriptor<>("fall-incident-state", IncidentState.class));
+        }
+
+        @Override
+        public void processElement(PatientTelemetry telemetry, Context context, Collector<AlertEnvelope> out) throws Exception {
+            IncidentState oxygen = stateOrInactive(oxygenState.value());
+            IncidentState geofence = stateOrInactive(geofenceState.value());
+            IncidentState fall = stateOrInactive(fallState.value());
+            long now = context.timerService().currentProcessingTime();
+
+            if ("Recovered".equalsIgnoreCase(telemetry.movementStatus())) {
+                oxygen = resolveIncident("VITALS_OXYGEN_LOW", "Patient recovered. Oxygen incident resolved.", telemetry, oxygen, geofence, fall, now, out);
+                geofence = resolveIncident("GEOFENCE_EXIT_GATE", "Patient recovered. Geofence incident resolved.", telemetry, geofence, oxygen, fall, now, out);
+                fall = resolveIncident("FALL_DETECTED", "Patient recovered. Fall incident resolved.", telemetry, fall, oxygen, geofence, now, out);
+            } else {
+                boolean oxygenActive = telemetry.oxygenLevel() < 90;
+                oxygen = processIncidentRule(
+                        "VITALS_OXYGEN_LOW",
+                        oxygen,
+                        geofence,
+                        fall,
+                        telemetry,
+                        oxygenActive,
+                        oxygenSeverity(telemetry.oxygenLevel()),
+                        String.format("Oxygen alert: patient %d in %s has SpO2=%d%%", telemetry.patientId(), telemetry.locationZone(), telemetry.oxygenLevel()),
+                        now,
+                        out
+                );
+
+                boolean geofenceActive = "Exit Gate".equalsIgnoreCase(telemetry.locationZone());
+                geofence = processIncidentRule(
+                        "GEOFENCE_EXIT_GATE",
+                        geofence,
+                        oxygen,
+                        fall,
+                        telemetry,
+                        geofenceActive,
+                        telemetry.dementiaFlag() ? "HIGH_RISK" : "ELEVATED_RISK",
+                        String.format("Geofence breach: patient %d entered Exit Gate (dementia=%s)", telemetry.patientId(), telemetry.dementiaFlag()),
+                        now,
+                        out
+                );
+
+                boolean fallActive = "Fall Detected".equalsIgnoreCase(telemetry.movementStatus());
+                fall = processIncidentRule(
+                        "FALL_DETECTED",
+                        fall,
+                        oxygen,
+                        geofence,
+                        telemetry,
+                        fallActive,
+                        "CRITICAL",
+                        String.format("Fall detected for patient %d in %s", telemetry.patientId(), telemetry.locationZone()),
+                        now,
+                        out
+                );
+            }
+
+            oxygenState.update(oxygen);
+            geofenceState.update(geofence);
+            fallState.update(fall);
+        }
+
+        private IncidentState processIncidentRule(
+                String rule,
+                IncidentState current,
+                IncidentState otherA,
+                IncidentState otherB,
+                PatientTelemetry telemetry,
+                boolean conditionActive,
+                String severity,
+                String conditionMessage,
+                long now,
+                Collector<AlertEnvelope> out
+        ) {
+            int remainingOtherActive = activeCount(otherA, otherB);
+
+            if (!conditionActive) {
+                if (current.active) {
+                    emitIncidentEvent(
+                            rule,
+                            telemetry,
+                            current,
+                            "INCIDENT_RESOLVED",
+                            "NORMAL",
+                            "Patient returned to normal for this rule",
+                            remainingOtherActive,
+                            out
+                    );
+                }
+                return IncidentState.inactive();
+            }
+
+            if (!current.active) {
+                IncidentState opened = new IncidentState();
+                opened.active = true;
+                opened.incidentId = UUID.randomUUID().toString();
+                opened.severity = severity;
+                opened.incidentKey = incidentKey(telemetry.patientId(), rule, telemetry.locationZone());
+                opened.startedAtMillis = now;
+                opened.lastHeartbeatAtMillis = now;
+
+                emitIncidentEvent(
+                        rule,
+                        telemetry,
+                        opened,
+                        "INCIDENT_OPEN",
+                        severity,
+                        conditionMessage,
+                        remainingOtherActive + 1,
+                        out
+                );
+                return opened;
+            }
+
+            if (severityRank(severity) > severityRank(current.severity)) {
+                String previousSeverity = current.severity;
+                current.severity = severity;
+
+                emitIncidentEvent(
+                        rule,
+                        telemetry,
+                        current,
+                        "INCIDENT_ESCALATED",
+                        severity,
+                        String.format("Severity escalated from %s to %s. %s", previousSeverity, severity, conditionMessage),
+                        remainingOtherActive + 1,
+                        out
+                );
+            }
+
+            if (now - current.lastHeartbeatAtMillis >= heartbeatIntervalMillis) {
+                current.lastHeartbeatAtMillis = now;
+
+                emitIncidentEvent(
+                        rule,
+                        telemetry,
+                        current,
+                        "INCIDENT_HEARTBEAT",
+                        current.severity,
+                        String.format("Incident still active. %s", conditionMessage),
+                        remainingOtherActive + 1,
+                        out
+                );
+            }
+
+            return current;
+        }
+
+        private IncidentState resolveIncident(
+                String rule,
+                String message,
+                PatientTelemetry telemetry,
+                IncidentState current,
+                IncidentState otherA,
+                IncidentState otherB,
+                long now,
+                Collector<AlertEnvelope> out
+        ) {
+            if (!current.active) {
+                return current;
+            }
+
+            emitIncidentEvent(
+                    rule,
+                    telemetry,
+                    current,
+                    "INCIDENT_RESOLVED",
+                    "NORMAL",
+                    message,
+                    activeCount(otherA, otherB),
+                    out
+            );
+
+            return IncidentState.inactive();
+        }
+
+        private int activeCount(IncidentState one, IncidentState two) {
+            int count = 0;
+            if (one != null && one.active) {
+                count++;
+            }
+            if (two != null && two.active) {
+                count++;
+            }
+            return count;
+        }
+
+        private IncidentState stateOrInactive(IncidentState state) {
+            return state == null ? IncidentState.inactive() : state;
+        }
+
+        private String oxygenSeverity(int oxygenLevel) {
+            if (oxygenLevel < 85) {
+                return "SEVERE_CRITICAL";
+            }
+            return "CRITICAL";
+        }
+
+        private int severityRank(String severity) {
+            if (severity == null) {
+                return 0;
+            }
+            return switch (severity.toUpperCase()) {
+                case "NORMAL" -> 1;
+                case "ELEVATED_RISK", "WARNING", "TREND_ALERT" -> 2;
+                case "HIGH_RISK", "CRITICAL" -> 3;
+                case "SEVERE_CRITICAL" -> 4;
+                default -> 1;
+            };
+        }
+
+        private String incidentKey(int patientId, String rule, String locationZone) {
+            String zone = locationZone == null ? "UNKNOWN" : locationZone.trim().replace(' ', '_').toUpperCase();
+            return patientId + "|" + rule + "|" + zone;
+        }
+
+        private void emitIncidentEvent(
+                String rule,
+                PatientTelemetry telemetry,
+                IncidentState incident,
+                String incidentEventType,
+                String severity,
+                String message,
+                int activeIncidentCount,
+                Collector<AlertEnvelope> out
+        ) {
+            Map<String, Object> extra = new HashMap<>();
+            extra.put("incident_event_type", incidentEventType);
+            extra.put("incident_id", incident.incidentId);
+            extra.put("incident_key", incident.incidentKey);
+            extra.put("incident_started_at", Instant.ofEpochMilli(incident.startedAtMillis).toString());
+            extra.put("active_incident_count", activeIncidentCount);
+            extra.put("dedup_key", incident.incidentKey + "|" + incident.incidentId);
+
+            String payload = buildAlertJson(
+                    telemetry,
+                    rule,
+                    severity,
+                    message,
+                    null,
+                    null,
+                    null,
+                    extra
+            );
+
+            out.collect(new AlertEnvelope("URGENT", payload));
+        }
+    }
+
     private static class HeartRateTrendRule extends ProcessWindowFunction<PatientTelemetry, AlertEnvelope, Integer, TimeWindow> {
         @Override
         public void process(
@@ -475,6 +768,7 @@ public class EldercareAlertPipeline {
             String urgentQueue,
             String warningQueue,
             String archiveQueue,
+            int incidentHeartbeatSeconds,
             int parallelism
     ) {
         static PipelineConfig fromArgs(String[] args) {
@@ -491,6 +785,7 @@ public class EldercareAlertPipeline {
                     values.getOrDefault("urgent-queue", "nurse-urgent-alerts"),
                     values.getOrDefault("warning-queue", "nurse-warnings"),
                     values.getOrDefault("archive-queue", "alert-archive"),
+                    Integer.parseInt(values.getOrDefault("incident-heartbeat-seconds", "60")),
                     Integer.parseInt(values.getOrDefault("parallelism", "1"))
             );
         }
