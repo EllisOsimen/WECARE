@@ -13,7 +13,7 @@ services:
     restart: unless-stopped
 
   localstack:
-    image: localstack/localstack
+    image: localstack/localstack:2.0.2
     ports:
       - "4566:4566"
     environment:
@@ -53,3 +53,25 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     restart: unless-stopped
+
+  # --- YOUR APPLICATION ---
+  wecare-app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      # Kafka internal Docker listener is on 9093!
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9093
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_DATA_REDIS_HOST=redis
+      - AWS_DYNAMODB_ENDPOINT=http://localstack:4566
+      # Added Postgres just in case you enable it
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/wecare
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+    depends_on:
+      - kafka
+      - rabbitmq
+      - redis
+      - localstack
+      - postgres
